@@ -1,0 +1,16 @@
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/CMakeFiles/HelloWorld.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/CMakeFiles/edit_cache.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/CMakeFiles/rebuild_cache.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/CMakeFiles/list_install_components.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/CMakeFiles/install.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/CMakeFiles/install/local.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/CMakeFiles/install/strip.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/core/CMakeFiles/reactor-c.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/core/CMakeFiles/lf-low-level-platform-impl.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/core/CMakeFiles/lf-platform-impl.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/core/CMakeFiles/edit_cache.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/core/CMakeFiles/rebuild_cache.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/core/CMakeFiles/list_install_components.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/core/CMakeFiles/install.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/core/CMakeFiles/install/local.dir
+/home/linguafranca/lf-workspace/teste1/src-gen/HelloWorld/build/core/CMakeFiles/install/strip.dir

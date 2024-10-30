@@ -1,0 +1,226 @@
+target C{
+    timeout: 30 sec,
+  cmake-include: [
+      "paho-extension.cmake"]//Extensao para funcionar o paho - biblioteca MQTT, sem ela os metodos nao sao encontrados e nao funcionam.
+}
+
+preamble {=
+
+  #include "platform.h" // Defines lf_critical_section_enter(), etc.
+  #include <string.h>   // Defines memcpy
+
+  #include "MQTTClient.h"//importando a biblioteca que sera utilizada.
+
+    typedef struct MQTTSub_info{
+        void* logical_action;
+        
+    }MQTTSub_info;
+=}
+
+reactor MQTTPublisher(//Reator publicador
+  topic: string = "DefaultTopic",// Topico padrao, necessario passar o topico como argumento.
+  address: string = "tcp://localhost:1883" //O servico MQTT esta rodando nessa porta padrao na maquina local, caso deseje alterar so mudar o address.
+    
+){
+    //Inicializacao de variaveis importantes para o funcionamento.
+    state client: MQTTClient = {= NULL =}
+    state clientID: char* ={="ClientID"=}
+    state mqtt_msg: MQTTClient_message ={=MQTTClient_message_initializer=}
+    
+    input in: char* //Entrada do reator.
+    
+    reaction(startup){=//Sera executada essa reacao quando o programa for iniciado, o objetivo dela e criar toda parte de conexao.
+        // Poderia utilizar a funcao lf_critical_section_enter - Ela coloca essa secao como critica, nao permitindo multiplas threads.
+        LF_PRINT_LOG("Testando");
+        
+        MQTTClient_connectOptions pub_connect_options = MQTTClient_connectOptions_initializer; //Criando as opcoes de conexao padrao do publicador.
+        
+        MQTTClient_create(&self->client, self->address, self->clientID, MQTTCLIENT_PERSISTENCE_NONE, NULL);// Criacao do cliente MQTT, se precisar voce pode fazer uma comparacao com MQTTCLIENTE_SUCESS, para avaliar se foi criada corretamente.
+       
+        
+        pub_connect_options.keepAliveInterval = 20;//Especificar o tempo em segundos, que o cliente MQTT informa ao broker para matner a conexao viva.
+        pub_connect_options.cleansession = 1; //O Cliente deseja uma secao limpa, ou seja, nao deve reter nenhum estado anterior. Tambem e possivel usar 0.
+        
+        int rc; // Varivel auxiliar
+        
+        if ((rc = MQTTClient_connect(self->client, &pub_connect_options)) != MQTTCLIENT_SUCCESS) {//Confirmacao se a conexao foi feita com sucesso.
+          lf_print("\n Falha na criacao do publisher com: %d.", rc);
+        } else{
+          lf_print("\nMQTTPublisher: connected to broker.");
+        }
+    =}
+    
+    
+    
+    reaction(in){=//Reacao acionada quando tiver uma entrada.
+        MQTTClient_deliveryToken delivery=0;// Usado para criar uma variável delivery do tipo tokendelivery com o valor 0, serve para avaliar a qualidade de serviço, rastrea a entrega de mensagens publicadas.
+        int length = in->length;// Busca o tamanho da entrada.
+        char* message;
+        
+        message = (char*)malloc(sizeof(char)*length); //Alocacao Dinamica da memoria.
+        memcpy(message,in->value,length);// Funcao para copiar a mensagem do 2 para o 1 argumento e com o tamanho igual ao 3.
+        
+        instant_t timestamp = lf_time_logical();// Busca o tempo lógico. 
+        //printf("Tempo logico: %lld\n", timestamp);
+        //encode_int64(timestamp, (unsigned char*)(message+length-sizeof(instant_t)));//Pega o timestamp e insere como uma dequencia de bits inserida na mensagem.
+        
+        // Do status criado lá em cima de forma padrão aqui é alterada as informações para as informações desejadas.
+        self->mqtt_msg.payload = message;
+        self->mqtt_msg.payloadlen = length;
+        self->mqtt_msg.qos=2;
+        self->mqtt_msg.retained=0;
+        
+        MQTTClient_publishMessage(self->client,self->topic,&self->mqtt_msg,&delivery);//Publicação da mensagem
+
+      
+    =}
+    
+    
+    
+    reaction(shutdown){=// Quando for desligar retirar para não sobrecarregar e memória.
+        lf_print("\n Desconectando o Cliente Publisher: %s.", self->clientID);
+        MQTTClient_disconnect(self->client, 10000);
+        MQTTClient_destroy(&self->client);
+    =}
+    
+}
+
+
+reactor MQTTSubscriber(// Mesma lógica inicial do Publisher.
+    topic: string = "DefaultTopic",
+    address: string = "tcp://localhost:1883"){
+    preamble{=//O preamble serve que antes de ele fazer qualquer reação até a startup ele executa o preamble.
+    
+        
+    
+        int message_arrived(void *info, char* topic_name, int topic_length, MQTTClient_message *message){
+            
+            MQTTSub_info* my_info = (MQTTSub_info*)info;
+            
+            lf_print("\nMessagem Recebida no topico %s: Mesagem: %s",topic_name, (char*)message->payload);
+            
+            lf_schedule_copy(((MQTTSub_info*)info)->logical_action,
+                0,
+                (char*)message->payload,
+                message->payloadlen
+            );
+            
+            MQTTClient_freeMessage(&message);
+            MQTTClient_free(topic_name);
+            
+            return 1;
+        }//Essa função, representa a mensagem que será passada para o callback.
+        
+        void sub_perda_conexao(void *info, char *cause){
+            lf_print("Conexao perdida Subscriber por: %s",cause);
+        }//Essa função, representa a mensagem que será passada para o callback.
+    =}
+        
+    //Variáveis importantes que serão utilizadas.
+    logical action act:char*
+    output message: char*
+    state client: MQTTClient = {= NULL =}
+    state clientID: char* ={="ClientID"=}
+    state info: MQTTSub_info ={={NULL}=}
+ 
+    
+    reaction(startup)->act{=//Executar ao inici
+        int res;
+        
+        MQTTClient_connectOptions sub_connect_options = MQTTClient_connectOptions_initializer;
+        
+        res = MQTTClient_create(&self->client, self->address,self->clientID,MQTTCLIENT_PERSISTENCE_NONE, NULL);
+        
+        if(res != MQTTCLIENT_SUCCESS){
+            lf_print("\n 1.Falha na criacao do subscriber com: %d.", res);
+        }else{
+            lf_print("\n 1.Criacao subcribe feita com sucesso - Create Sucess");
+        }
+        
+        sub_connect_options.keepAliveInterval = 10;
+        sub_connect_options.cleansession = 1;
+        
+        self->info.logical_action=act;
+        
+        res = MQTTClient_setCallbacks(self->client,&self->info,sub_perda_conexao,message_arrived,NULL);
+        if(res != MQTTCLIENT_SUCCESS){
+            lf_print("\n 2.Callback nao esta funcionando:  %d.", res);
+        }else{
+            lf_print("\n 2.Callback funcionando corretamente. Setcalback Sucess");
+        }
+        
+        res = MQTTClient_connect(self->client,&sub_connect_options);
+        if(res != MQTTCLIENT_SUCCESS){
+            lf_print("\n 3.Falha na conexao o subscriber com: %d.", res);
+        }else{
+            lf_print("\n 3.Conexao subcribe feita com sucesso - Conexão Sucess");
+        }
+
+        res = MQTTClient_subscribe(self->client,self->topic, 2);
+        if(res != MQTTCLIENT_SUCCESS){
+            lf_print("\n 4.Subscriber nao funcionando:  %d.", res);
+        }else{
+            lf_print("\n 4.Subscriber funcionando corretamente. Subscribe sucess");
+        }
+        
+   
+    =}
+    
+    reaction(act) -> message{=
+        lf_set_token(message,act->token);
+        lf_print("\n Entrou aqui");
+        
+    =}
+    
+    reaction(shutdown){=
+        MQTTClient_disconnect(self->client, 10000);
+        MQTTClient_destroy(&self->client);
+        lf_print("\n Desconectando o Cliente Subscriber: %s.", self->clientID);
+    =}
+}
+
+reactor MessageGenerator(
+    root: string="Ola",
+    period: time = 1 sec
+){
+    output message: char*
+    state count: int = 1
+    timer t(1 sec, period)
+    
+    reaction(t) -> message{=
+        size_t length = snprintf(NULL,0,"%s %d", self->root,self->count)+1;
+        
+        char* buffer = (char*)malloc(length);
+        
+        snprintf(buffer,length,"%s %d", self->root,self->count++);
+        
+        lf_set_array(message,buffer,length);
+        
+        tag_t tag = lf_tag();
+        
+        lf_print("Gerador de Mensagem:"PRINTF_TAG " mensagem publicada: %s", tag.time - lf_time_start(),tag.microstep,message->value);
+    =}
+}
+
+reactor PrintMessage{
+    input message: char*
+    
+    reaction(message){=
+        tag_t tag = lf_tag();
+        lf_print("Mostrador de Mensagem:"PRINTF_TAG " subscriber recebe: %s", tag.time - lf_time_start(),tag.microstep,message->value);
+    =}
+}
+
+main reactor{
+    //pub = new MQTTPublisher(topic="test/test1",address="tcp://localhost:1883")
+    sub = new MQTTSubscriber(topic="test/test1",address="tcp://localhost:1883")
+    msg = new MessageGenerator(root = "Test Message")
+    mos = new PrintMessage()
+    //msg.message ->pub.in
+    sub.message -> mos.message
+    
+    
+    
+}
+
+
